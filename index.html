@@ -627,6 +627,20 @@ select.has-value {
   color: var(--accent-soft);
 }
 
+/* Dropdown options — dark background + light text for readability */
+select option {
+  background-color: #1a2035;
+  color: #e8ecf5;
+  font-weight: 500;
+  padding: 8px 12px;
+}
+
+select option:checked,
+select option:hover {
+  background-color: #2a3250;
+  color: #ffffff;
+}
+
 .reset-btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -1432,6 +1446,98 @@ body {
   to { transform: rotate(360deg); }
 }
 
+
+/* ===== Search Bar ===== */
+.search-wrap {
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 18px;
+  transition: all 0.2s ease;
+}
+
+.search-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.search-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.search-input::placeholder {
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+.search-clear {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: 22px;
+  height: 22px;
+}
+
+.search-clear.visible {
+  display: flex;
+}
+
+.search-clear:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+.search-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Highlight matched text */
+mark.hl {
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 700;
+}
+
+/* Dim filter panel when searching */
+.filter-panel.dimmed {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
 </style>
 </head>
 <body>
@@ -1659,6 +1765,27 @@ body {
       </div>
     </div>
   </header>
+
+  <!-- Search Bar -->
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.3-4.3"/>
+      </svg>
+      <input class="search-input" id="searchInput"
+             type="text"
+             placeholder="ค้นหา ID หรือชื่อมาตรฐาน เช่น 2301, CCB, rack..."
+             autocomplete="off"
+             spellcheck="false">
+      <button class="search-clear" id="searchClear" title="ล้าง">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 
   <section class="filter-panel">
     <div class="filter-header">
@@ -1951,6 +2078,8 @@ const SCHEMAS = {
 };
 
 // ===== STATE =====
+let searchQuery = "";
+
 const state = {
   system: "",
   category: "",
@@ -2018,6 +2147,29 @@ function uniqueValues(data, key) {
 }
 
 function getFilteredData() {
+  const q = searchQuery.trim().toLowerCase();
+
+  if (q) {
+    // Search mode — ignore dropdown filters
+    return DATA.filter(item => {
+      return (
+        (item.id || "").toLowerCase().includes(q) ||
+        (item.standardName || "").toLowerCase().includes(q) ||
+        (item.standardCode || "").toLowerCase().includes(q) ||
+        (item.description || "").toLowerCase().includes(q) ||
+        (item.equipment || "").toLowerCase().includes(q) ||
+        (item.poleType || "").toLowerCase().includes(q) ||
+        (item.category || "").toLowerCase().includes(q) ||
+        (item.orientation || "").toLowerCase().includes(q) ||
+        (item.circuits || "").toLowerCase().includes(q) ||
+        (item.phase || "").toLowerCase().includes(q) ||
+        (item.hangType || "").toLowerCase().includes(q) ||
+        (item.routeType || "").toLowerCase().includes(q)
+      );
+    });
+  }
+
+  // Filter mode
   return DATA.filter(item => {
     if (state.system && item.system.trim() !== state.system) return false;
     if (state.category && item.category !== state.category) return false;
@@ -2031,6 +2183,15 @@ function getFilteredData() {
     if (state.poleType && item.poleType !== state.poleType) return false;
     return true;
   });
+}
+
+function highlight(text, q) {
+  if (!q || !text) return text || "";
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return text.slice(0, idx) +
+    '<mark class="hl">' + text.slice(idx, idx + q.length) + '</mark>' +
+    text.slice(idx + q.length);
 }
 
 function populateSelect(selectEl, values, currentValue, placeholderText) {
@@ -2184,6 +2345,7 @@ function renderResults() {
     return;
   }
 
+  const q = searchQuery.trim().toLowerCase();
   grid.innerHTML = filtered.map(item => {
     const tags = [];
     if (item.category) tags.push(item.category);
@@ -2194,17 +2356,20 @@ function renderResults() {
     if (item.routeType && item.routeType !== "-") tags.push(item.routeType);
     if (item.poleType && item.poleType !== "-") tags.push(item.poleType);
 
+    const idDisplay = q ? highlight(item.id, q) : item.id;
+    const nameDisplay = q ? highlight(item.standardName || "(ไม่มีชื่อมาตรฐาน)", q) : (item.standardName || "(ไม่มีชื่อมาตรฐาน)");
+
     return `
       <article class="card" data-id="${item.id}">
         <div class="card-image system-${item.system.trim()}">
           ${item.image1URL
             ? `<img src="${item.image1URL}" alt="${item.standardName}" onerror="this.parentElement.innerHTML='<img src=&quot;${getSystemImage(item.system)}&quot; alt=&quot;${item.system}&quot; class=&quot;system-placeholder&quot;>'+'<span class=&quot;card-id&quot;>${item.id}</span><span class=&quot;card-system-badge&quot;>${item.system.trim()}</span>'">`
             : `<img src="${getSystemImage(item.system)}" alt="${item.system}" class="system-placeholder">`}
-          <span class="card-id">${item.id}</span>
+          <span class="card-id">${idDisplay}</span>
           <span class="card-system-badge">${item.system.trim()}</span>
         </div>
         <div class="card-body">
-          <h3 class="card-title">${item.standardName || "(ไม่มีชื่อมาตรฐาน)"}</h3>
+          <h3 class="card-title">${nameDisplay}</h3>
           ${item.standardCode ? `<span class="card-code">${item.standardCode}</span>` : ""}
           <p class="card-desc">${item.description || ""}</p>
           ${tags.length ? `<div class="card-tags">${tags.map(t => `<span class="tag">${t}</span>`).join("")}</div>` : ""}
@@ -2275,33 +2440,14 @@ function renderPdfViewer(item) {
   const tabsId = "pdf-tabs-" + Date.now();
 
   container.innerHTML = `
-    <div class="pdf-method-tabs" id="${tabsId}">
-      <button class="pdf-method-tab active" data-method="drive">Google Drive</button>
-      <button class="pdf-method-tab" data-method="gview">Docs Viewer</button>
-      <button class="pdf-method-tab" data-method="pdfjs">PDF.js</button>
-    </div>
     <div class="pdf-viewer-frame">
       <iframe id="${frameId}" src="${previewUrl}" allow="autoplay" loading="lazy"></iframe>
     </div>
     <div class="pdf-help">
-      💡 ถ้าไฟล์ไม่แสดง ลองสลับ tab ด้านบน หรือกดปุ่ม <strong>"เปิดในแท็บใหม่"</strong> 🔗 ด้านบนขวา
+      💡 ถ้าไฟล์ไม่แสดง กดปุ่ม <strong>"เปิดในแท็บใหม่"</strong> 🔗 ด้านบนขวา
     </div>`;
 
-  // Wire up tabs
-  setTimeout(() => {
-    const tabsContainer = document.getElementById(tabsId);
-    const frame = document.getElementById(frameId);
-    if (tabsContainer && frame) {
-      const urls = { drive: previewUrl, gview: gviewUrl, pdfjs: pdfjsUrl };
-      tabsContainer.querySelectorAll(".pdf-method-tab").forEach(tab => {
-        tab.addEventListener("click", () => {
-          tabsContainer.querySelectorAll(".pdf-method-tab").forEach(t => t.classList.remove("active"));
-          tab.classList.add("active");
-          frame.src = urls[tab.dataset.method];
-        });
-      });
-    }
-  }, 50);
+  // Single viewer — no tabs needed
 
   ["pdfFullscreenBtn", "pdfNewTabBtn", "pdfDownloadBtn"].forEach(id => $(id).style.display = "flex");
   $("pdfNewTabBtn").href = item.fileURL;
@@ -2531,6 +2677,47 @@ if (bubbleEl) {
     requestAnimationFrame(syncBubble);
   }
 }
+
+
+// ===== Search Logic =====
+const searchInput = $("searchInput");
+const searchClear = $("searchClear");
+const filterPanel = document.querySelector(".filter-panel");
+
+let debounceTimer;
+
+function applySearch(query) {
+  searchQuery = query.trim();
+
+  if (searchQuery) {
+    searchClear.classList.add("visible");
+    filterPanel.classList.add("dimmed");
+  } else {
+    searchClear.classList.remove("visible");
+    filterPanel.classList.remove("dimmed");
+  }
+
+  renderResults();
+}
+
+searchInput.addEventListener("input", e => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => applySearch(e.target.value), 180);
+});
+
+searchInput.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    searchInput.value = "";
+    applySearch("");
+    searchInput.blur();
+  }
+});
+
+searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  applySearch("");
+  searchInput.focus();
+});
 
 // ===== INIT =====
 async function init() {
